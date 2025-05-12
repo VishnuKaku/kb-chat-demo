@@ -1,0 +1,192 @@
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.2
+    container_name: keycloak
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_PROXY_HEADERS: all
+      KC_PROXY: edge
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_RELATIVE_PATH: "/auth"
+    ports:
+      - "8080:8080"
+    command: start-dev --http-enabled=true --hostname-strict=false
+    depends_on:
+      - keycloak-db
+    networks:
+      - kbnet
+    # volumes:
+    #   - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+
+  keycloak-db:
+    image: postgres:15
+    container_name: keycloak-db
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    networks:
+      - kbnet
+
+  outline:
+    build: ./custom-outline
+    container_name: outline
+    depends_on:
+      - outline-db
+      - outline-redis
+    environment:
+      SECRET_KEY: b7e2a1c4d5f6e7b8c9a0f1e2d3c4b5a6e7f8d9c0b1a2e3f4c5d6b7a8c9e0f1d2
+      UTILS_SECRET: 9f8e7d6c5b4a39281726354433221100ffeeddccbbaa99887766554433221100
+      DATABASE_URL: postgres://outline:outline@outline-db:5432/outline?sslmode=disable
+      REDIS_URL: redis://outline-redis:6379
+      URL: http://localhost
+      PORT: 3001
+      FORCE_HTTPS: false
+      NODE_ENV: production
+      AWS_ACCESS_KEY_ID: outline-test
+      AWS_SECRET_ACCESS_KEY: outline-test
+      AWS_REGION: us-east-1
+      AWS_S3_UPLOAD_BUCKET_URL: http://localhost
+      AWS_S3_UPLOAD_BUCKET_NAME: outline-test
+      AWS_S3_FORCE_PATH_STYLE: true
+      AWS_S3_ACL: private
+      ALLOWED_DOMAINS: "localhost,127.0.0.1"
+      ENABLE_UPDATES: false
+      DEBUG: "*"
+      HOST: 0.0.0.0
+      CORS_ORIGIN: "*"
+      WEB_CONCURRENCY: 1
+      MAXIMUM_IMPORT_SIZE: 5120000
+      DEFAULT_LANGUAGE: "en_US"
+      DEPLOYMENT: self
+      OIDC_CLIENT_ID: outline
+      OIDC_CLIENT_SECRET: 5nOBriuLZ4On5aV8XTfPXvXAsxrJLdTF
+      OIDC_AUTH_URI: http://localhost/auth/realms/master/protocol/openid-connect/auth
+      OIDC_TOKEN_URI: http://keycloak:8080/realms/master/protocol/openid-connect/token
+      OIDC_USERINFO_URI: http://keycloak:8080/realms/master/protocol/openid-connect/userinfo
+      OIDC_DISPLAY_NAME: "Keycloak"
+      OIDC_SCOPES: "openid email profile"
+      OIDC_LOGOUT_URI: http://localhost/auth/realms/master/protocol/openid-connect/logout
+    expose:
+      - 3001
+    networks:
+      - kbnet
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  outline-db:
+    image: postgres:15
+    container_name: outline-db
+    environment:
+      POSTGRES_DB: outline
+      POSTGRES_USER: outline
+      POSTGRES_PASSWORD: outline
+    volumes:
+      - outline-db-data:/var/lib/postgresql/data
+    networks:
+      - kbnet
+
+  outline-redis:
+    image: redis:7
+    container_name: outline-redis
+    networks:
+      - kbnet
+  chatwoot:
+    image: chatwoot/chatwoot:latest
+    container_name: chatwoot
+    depends_on:
+      - chatwoot-db
+      - chatwoot-redis
+    environment:
+      RAILS_ENV: production
+      INSTALLATION_NAME: "KB Chat Demo"
+      FRONTEND_URL: "http://localhost"
+      POSTGRES_HOST: chatwoot-db
+      POSTGRES_DATABASE: chatwoot
+      POSTGRES_USERNAME: chatwoot
+      POSTGRES_PASSWORD: chatwoot
+      REDIS_URL: "redis://chatwoot-redis:6379"
+      SECRET_KEY_BASE: "changeme"
+      FORCE_SSL: "false"
+      ENABLE_ACCOUNT_SIGNUP: "false"
+      OIDC_ENABLED: "true"
+      OIDC_CLIENT_ID: "chatwoot"
+      OIDC_CLIENT_SECRET: "9IAwkLcb34eeaqDWjGspIDhEuOW0Ixs1"
+      OIDC_ISSUER: "http://localhost/auth/realms/master"
+      OIDC_AUTH_SERVER_URL: "http://localhost/auth/realms/master/protocol/openid-connect/auth"
+      OIDC_TOKEN_SERVER_URL: "http://keycloak:8080/auth/realms/master/protocol/openid-connect/token"
+      OIDC_USER_INFO_URL: "http://keycloak:8080/auth/realms/master/protocol/openid-connect/userinfo"
+      OIDC_SCOPE: "openid profile email"
+    ports:
+      - "3003:3000"
+    networks:
+      - kbnet
+
+  chatwoot-db:
+    image: postgres:15
+    container_name: chatwoot-db
+    environment:
+      POSTGRES_DB: chatwoot
+      POSTGRES_USER: chatwoot
+      POSTGRES_PASSWORD: chatwoot
+    volumes:
+      - chatwoot-db-data:/var/lib/postgresql/data
+    networks:
+      - kbnet
+
+  chatwoot-redis:
+    image: redis:7
+    container_name: chatwoot-redis
+    networks:
+      - kbnet
+  bot:
+    build: ./bot
+    container_name: bot
+    environment:
+      PORT: 3002
+      CHATWOOT_API_URL: "http://chatwoot:3000/api/v1"
+      CHATWOOT_API_KEY: "${CHATWOOT_API_KEY}"
+      OUTLINE_API_URL: "http://outline:3001/api"
+      OUTLINE_API_KEY: "${OUTLINE_API_KEY}"
+    ports:
+      - "3002:3002"
+    depends_on:
+      - outline
+      - chatwoot
+    networks:
+      - kbnet
+
+  web-ui:
+    build: ./web-ui
+    container_name: web-ui
+    ports:
+      - "3000:3000"
+    networks:
+      - kbnet
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - web-ui
+      - outline
+      - chatwoot
+    networks:
+      - kbnet
+
+networks:
+  kbnet:
+    driver: bridge
+
+volumes:
+  keycloak-db-data:
+  outline-db-data:
+  chatwoot-db-data:

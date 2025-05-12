@@ -1,0 +1,17 @@
+{
+  "$schema": "./local-package-schema.json",
+  "name": "kb-chat-demo",
+  "version": "1.0.0",
+  "description": "Integration of Outline, Chatwoot, and Keycloak with SSO and bot agent.",
+  "main": "index.js",
+  "scripts": {
+    "start": "docker-compose up -d --build",
+    "stop": "docker-compose down",
+    "logs": "docker-compose logs --follow",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["outline", "chatwoot", "keycloak", "docker", "integration"],
+  "author": "Vishnu",
+  "license": "ISC",
+  "private": true
+}
